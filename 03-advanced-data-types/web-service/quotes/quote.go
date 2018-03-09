@@ -1,6 +1,8 @@
 package quotes
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 )
 
@@ -13,26 +15,21 @@ type Quote struct {
 
 // Serialize returns a gob encoding of quote q.
 func (q Quote) Serialize() ([]byte, error) {
-
-	// TODO:
-	// Create a bytes.Buffer
-	// Create a new gob.Encoder based on this buffer
-	// Encode q into the buffer
-	// If any error occurred, return nil and the error
-	// else return the buffer and no error
-
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(q)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // Deserialize takes a byte slice that contains a gob-encoded quote
 // and turns it back into a Quote.
 func (q *Quote) Deserialize(b []byte) error {
-
-	// TODO:
-	// Create a new bytes.Buffer from b
-	// Create a new gob.Decoder
-	// Decode the buffer into q
-	// Return any error or nil
-
+	buf := bytes.NewBuffer(b)
+	dec := gob.NewDecoder(buf)
+	return dec.Decode(q)
 }
 
 // String implements the stringer interface. A Quote can now be used

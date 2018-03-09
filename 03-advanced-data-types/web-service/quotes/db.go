@@ -1,6 +1,8 @@
 package quotes
 
 import (
+	"fmt"
+
 	"github.com/coreos/bbolt"
 )
 
@@ -15,20 +17,12 @@ const (
 
 // Open opens the database file at path and returns a DB or an error.
 func Open(path string) (*DB, error) {
-
-	// TODO:
-	// Open the DB file at path using bolt.Open().
-	// Pass 0600 as file mode, and nil as options.
-	// Return a pointer to the open DB, or an error.
-
+	db, err := bolt.Open(path, 0600, nil)
+	return &DB{db}, err
 }
 
 func (d *DB) Close() error {
-
-	// TODO:
-	// Close the database d.db and return any
-	// error or nil.
-
+	return d.db.Close()
 }
 
 // Create takes a quote and saves it to the database, using the author name
@@ -36,24 +30,30 @@ func (d *DB) Close() error {
 func (d *DB) Create(q *Quote) error {
 	err := d.db.Update(func(tx *bolt.Tx) error {
 
-		// TODO: Create a bucket if it does not exist already.
-		// Use the constant quoteBucket as the bucket name.
-		//
-		// Remember to use []byte(...) to convert a string into a byte
-		// slice if required.
-		//
-		// Ensure that the quote we want to save does not already exist.
-		// Hint: Call bucket.Get and verify if the result has zero length.
-		//
-		// Serialize the quote, using the Serialize method from quote.go.
-		//
-		// Put the serialized quote into the bucket.
-		//
-		// Remember to check all errors.
+		b, err := tx.CreateBucketIfNotExists([]byte(quoteBucket))
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
 
+		v := b.Get([]byte(q.Author))
+		if v != nil {
+			return fmt.Errorf("quote already exsists")
+		}
+
+		serializedQuote, err := q.Serialize()
+		if err != nil {
+			return fmt.Errorf("serialize quote: %s", err)
+		}
+
+		err = b.Put([]byte(q.Author), serializedQuote)
+		if err != nil {
+			return fmt.Errorf("put quote: %s", err)
+		}
+
+		return nil
 	})
 
-	// TODO: Check the error returned by d.db.Update. Return an error or nil.
+	return err
 }
 
 // Get takes an author name and retrieves the corresponding quote from the DB.
@@ -61,23 +61,23 @@ func (d *DB) Get(author string) (*Quote, error) {
 	q := &Quote{}
 	err := d.db.View(func(tx *bolt.Tx) error {
 
-		// TODO:
-		// Get the bucket with the name as specified by the constant quoteBucket.
-		// The bucket is available from the transaction object tx.
-		//
-		// Get the desired quote by the author's name.
-		//
-		// Again, remember to use []byte(...) to convert a string into a byte
-		// slice if required.
-		//
-		// Deserialize the quote into q - use the Deserialize method from
-		// quote.go for this.
-		// Remember that we are within a closure that has access to q.
-		//
-		// Check and return any error that occurs.
+		b := tx.Bucket([]byte(quoteBucket))
+		if b == nil {
+			return fmt.Errorf("no bucket")
+		}
+
+		v := b.Get([]byte(author))
+		if v == nil {
+			return fmt.Errorf("no quote by that author")
+		}
+
+		return q.Deserialize(v)
 	})
-	// Check the error returned by d.db.View.
-	// Return (nil, err) or (&q, nil), respectively.
+
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
 }
 
 // List lists all records in the DB.
@@ -89,18 +89,27 @@ func (d *DB) List() ([]*Quote, error) {
 	// We use a View as we don't update anything.
 	err := d.db.View(func(tx *bolt.Tx) error {
 
-		// TODO:
-		// Get the bucket from the transaction tx.
-		//
-		// Iterate over all elements of the bucket.
-		// Hint: BoltDB has a ForEach method for this.
-		//   * For each element, create a new *Quote and deserialize
-		//     the element value into the *Quote.
-		//   * Then append the *Quote to structList.
-		//
-		// Check and return any errors.
+		b := tx.Bucket([]byte(quoteBucket))
+		if b == nil {
+			return fmt.Errorf("no bucket")
+		}
+
+		err := b.ForEach(func(k, v []byte) error {
+			q := &Quote{}
+			err := q.Deserialize(v)
+			if err != nil {
+				return err
+			}
+
+			structList = append(structList, q)
+			return nil
+		})
+
+		return err
 	})
 
-	// TODO: Check the error returned by d.db.View().
-	// Return (structList, nil) or (nil, err), respectively.
+	if err != nil {
+		return nil, err
+	}
+	return structList, nil
 }
